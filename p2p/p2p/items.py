@@ -13,5 +13,6 @@ class P2PItem(scrapy.Item):
     # name = scrapy.Field()
     url = scrapy.Field()
     title = scrapy.Field()
-    content = scrapy.Field()
     domain = scrapy.Field()
+    content = scrapy.Field()
+    

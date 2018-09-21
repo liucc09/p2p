@@ -1,10 +1,12 @@
 import scrapy
 import os
 from p2p.items import P2PItem
+import re
+import logging
 
 class P2PSpider(scrapy.Spider):
     item_max = 20 #设一个抓取文章的上限，防止一直抓取
-    url_max = 100 #设一个访问url的上限
+    url_max = 1000 #设一个访问url的上限
 
     item_num = 0
     url_num = 0
@@ -16,22 +18,21 @@ class P2PSpider(scrapy.Spider):
     ]
 
     def parse(self, response):
-        self.log(f'enter baidu : {response.url}')
-        url_res = response.css("div.result h3.c-title a::attr(href)").extract()
+        logging.info(f'enter baidu : {response.url}')
+        url_res = response.css("div.result h3.c-title a::attr(href)").extract()  #提取新闻的url
 
-        url_page = response.css("p#page a::attr(href)").extract()
+        url_page = response.css("p#page a::attr(href)").extract() #提取翻页的url
 
         for u in url_res:
             self.url_num += 1
             
             if (self.url_num < self.url_max) and (self.item_num < self.item_max):
-                self.log(f'url id {self.url_num}/{self.url_max} : {u}')
+                logging.debug(f'url id {self.url_num}/{self.url_max} : {u}')
                 if "sohu.com" in u:
-                    yield scrapy.Request(u,callback=self.parse_sohu)
+                    yield scrapy.Request(u,callback=self.parse_sohu) #由于不同站点的html格式不一样，所以callback调用不同函数分别处理
                 elif "ifeng.com" in u:
                     yield scrapy.Request(u,callback=self.parse_ifeng)
-            else:
-                return
+            
 
 
         for u in url_page:
@@ -39,43 +40,48 @@ class P2PSpider(scrapy.Spider):
             self.url_num += 1
             
             if (self.url_num < self.url_max) and (self.item_num < self.item_max):
-                self.log(f'url id {self.url_num}/{self.url_max} : {u}')
+                logging.debug(f'url id {self.url_num}/{self.url_max} : {u}')
                 if "news.baidu.com" in u:
                     yield scrapy.Request(u,callback=self.parse)
-            else:
-                return
+            
 
     def parse_sohu(self,response):
-        self.log(f'parse sohu {self.item_num}: {response.url}')
-
-        item = P2PItem()
-        item['url'] = response.url
-        item['title'] = response.css("div.text-title h1::text").extract_first()
-        item['domain'] = 'sohu.com'
-
-        item['content'] = ''.join(response.xpath("//article//text()").extract())
+        logging.info(f'parse sohu {self.item_num}/{self.item_max}: {response.url}')
         
-        self.item_num+=1
-        if self.item_num<self.item_max:
-            yield item
+        title = response.css("div.text-title h1::text").extract_first()
+        content = ''.join(response.xpath("//article//text()").extract())
+        
+        if (title is not None) and (content is not None):
+            item = P2PItem()
+            item['url'] = response.url
+            item['title'] = title.replace(' ','')
+            item['domain'] = 'sohu.com'
+            item['content'] = re.sub(r'\s+',r'\n',content.replace(' ',''))
+            
+            self.item_num+=1
+            if self.item_num<self.item_max:
+                return item #返回数据结构
             
 
 
     def parse_ifeng(self,response):
-        self.log(f'parse ifeng {self.item_num}: {response.url}')
+        logging.info(f'parse ifeng {self.item_num}/{self.item_max}: {response.url}')
 
-        
-        item = P2PItem()
-        item['url'] = response.url
-        item['title'] = response.css("h1#artical_topic::text").extract_first()
-        item['domain'] = 'ifeng.com'
+        title = response.css("h1#artical_topic::text").extract_first()
+        content = ''.join(response.xpath("//div[@id='main_content']//text()").extract())
 
-        item['content'] = ''.join(response.xpath("//div[@id='main_content']//text()").extract())
-        
-        self.item_num+=1
-        if self.item_num<self.item_max:
-            yield item
+        if (title is not None) and (content is not None):
+            item = P2PItem()
+            item['url'] = response.url
+
+            item['title'] = title.replace(' ','')
+            item['domain'] = 'ifeng.com'
+            item['content'] = re.sub(r'\s+',r'\n',content.replace(' ',''))
             
+            self.item_num+=1
+            if self.item_num<self.item_max:
+                return item
+                
 
         
         
